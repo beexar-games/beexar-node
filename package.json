@@ -1,0 +1,117 @@
+{
+  "name": "@beexar/sdk",
+  "version": "1.0.0",
+  "description": "Beexar operator SDK — launch game sessions and serve the four seamless-wallet callbacks.",
+  "license": "MIT",
+  "homepage": "https://docs.beexar.com/tools/sdk-node/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beexar-games/beexar-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/beexar-games/beexar-node/issues"
+  },
+  "keywords": [
+    "beexar",
+    "casino",
+    "seamless-wallet",
+    "game-aggregator",
+    "softswiss",
+    "betwin",
+    "rollback"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./express": {
+      "import": {
+        "types": "./dist/esm/adapters/express.d.ts",
+        "default": "./dist/esm/adapters/express.js"
+      },
+      "require": {
+        "types": "./dist/cjs/adapters/express.d.ts",
+        "default": "./dist/cjs/adapters/express.js"
+      }
+    },
+    "./fastify": {
+      "import": {
+        "types": "./dist/esm/adapters/fastify.d.ts",
+        "default": "./dist/esm/adapters/fastify.js"
+      },
+      "require": {
+        "types": "./dist/cjs/adapters/fastify.d.ts",
+        "default": "./dist/cjs/adapters/fastify.js"
+      }
+    },
+    "./node-http": {
+      "import": {
+        "types": "./dist/esm/adapters/node-http.d.ts",
+        "default": "./dist/esm/adapters/node-http.js"
+      },
+      "require": {
+        "types": "./dist/cjs/adapters/node-http.d.ts",
+        "default": "./dist/cjs/adapters/node-http.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "openapi",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../api/providers/softswiss/wallet.yaml -o src/generated/wallet.d.ts && openapi-typescript ../../api/softswiss/gateway.yaml -o src/generated/launcher.d.ts && openapi-typescript ../../api/gateway.yaml -o src/generated/catalog.d.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && tsc -p tsconfig.cjs.json && node scripts/cjs-package-json.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "api:check": "api-extractor run --verbose",
+    "api:update": "api-extractor run --local --verbose",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@microsoft/api-extractor": "7.52.14",
+    "@types/express": "5.0.6",
+    "@types/node": "22.19.1",
+    "express": "5.1.0",
+    "fastify": "5.6.2",
+    "openapi-typescript": "7.9.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  },
+  "typesVersions": {
+    "*": {
+      "express": [
+        "./dist/cjs/adapters/express.d.ts"
+      ],
+      "fastify": [
+        "./dist/cjs/adapters/fastify.d.ts"
+      ],
+      "node-http": [
+        "./dist/cjs/adapters/node-http.d.ts"
+      ]
+    }
+  }
+}

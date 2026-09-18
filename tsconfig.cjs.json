@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "verbatimModuleSyntax": false,
+    "outDir": "dist/cjs",
+    "rootDir": "src",
+    // CJS declarations are emitted too. dist/cjs/package.json marks the
+    // directory "type": "commonjs", so TypeScript reads these .d.ts files with
+    // CJS semantics — without them a `require()` consumer is handed the ESM
+    // declarations and every import in them is wrong.
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src"],
+  "exclude": ["src/generated"]
+}

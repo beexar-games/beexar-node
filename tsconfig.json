@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "baseUrl": ".",
+    "paths": {
+      "@beexar/sdk": ["./src/index.ts"],
+      "@beexar/sdk/express": ["./src/adapters/express.ts"],
+      "@beexar/sdk/fastify": ["./src/adapters/fastify.ts"],
+      "@beexar/sdk/node-http": ["./src/adapters/node-http.ts"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src", "test", "examples", "scripts", "vitest.config.ts"]
+}

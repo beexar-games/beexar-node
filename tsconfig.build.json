@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist/esm",
+    "rootDir": "src",
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src"],
+  // src/generated holds the openapi-typescript output and the compile-time
+  // bridge that pins the hand-written types to it. Both are build-time gates,
+  // not public API: `npm run typecheck` compiles them, the shipped package does
+  // not. Emitting the bridge would put a d.ts in dist whose imports resolve to
+  // .d.ts inputs tsc never copies — types broken for every consumer.
+  "exclude": ["src/generated"]
+}
