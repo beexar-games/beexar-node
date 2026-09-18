@@ -29,16 +29,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 ships npm 11.19, which is past the 11.5.1 that trusted
+      # publishing needs — so there is no global npm install here at all.
+      #
+      # There was one, `npm install -g npm@latest`, and it broke the first
+      # release: npm@latest became 12.x, which requires Node >= 22.22, and the
+      # step died on Node 20 before the publish was ever attempted. Pinning to
+      # a floating tag inside CI is the same mistake this project refuses to
+      # make with its code generators.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      # Trusted publishing needs npm >= 11.5.1; the npm bundled with Node 20 is
-      # older, and without this the publish falls back to looking for a token
-      # that does not exist.
-      - name: Use an npm that speaks OIDC
-        run: npm install -g npm@latest
+      - name: Check npm can do OIDC
+        run: |
+          NPM_VERSION="$(npm --version)"
+          echo "npm ${NPM_VERSION}"
+          node -e '
+            const [maj, min, patch] = process.argv[1].split(".").map(Number)
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && patch >= 1)))
+            if (!ok) {
+              console.error(`npm ${process.argv[1]} cannot use trusted publishing; 11.5.1+ is required`)
+              process.exit(1)
+            }
+          ' "${NPM_VERSION}"
 
       - run: npm ci
 
