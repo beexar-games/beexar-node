@@ -1,0 +1,67 @@
+# Publishes @beexar/sdk to npm when GitLab pushes a release tag here.
+#
+# There is NO npm token. npm's trusted publishing takes the short-lived OIDC
+# token GitHub mints for this exact workflow in this exact repository and
+# exchanges it for a one-shot publish credential. That is why `id-token: write`
+# below is load-bearing and not boilerplate — remove it and the publish fails.
+#
+# The npm side is configured once, at
+#   npmjs.com -> @beexar/sdk -> Settings -> Trusted Publisher
+#   provider: GitHub Actions · repository: beexar-games/beexar-node · workflow: publish.yml
+#
+# It also removes the two deadlines a token carries: the 90-day expiry on
+# write-enabled granular tokens, and the January 2027 removal of direct publish
+# by token altogether.
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1; the npm bundled with Node 20 is
+      # older, and without this the publish falls back to looking for a token
+      # that does not exist.
+      - name: Use an npm that speaks OIDC
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      # The same suite GitLab ran, run again against what is actually about to
+      # ship. A tag that cannot pass its own tests must not reach the registry.
+      - run: npm test
+
+      - run: npm run build
+
+      # --provenance signs the package with the workflow's identity. It only
+      # works from a trusted issuer, which is precisely what this workflow is.
+      - name: Publish
+        run: npm publish --provenance --access public
+
+      - name: Verify it is installable
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          for i in $(seq 1 12); do
+            if npm view "@beexar/sdk@${VERSION}" version >/dev/null 2>&1; then
+              echo "@beexar/sdk@${VERSION} is live"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "@beexar/sdk@${VERSION} did not appear on the registry" >&2
+          exit 1
