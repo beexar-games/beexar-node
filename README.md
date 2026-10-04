@@ -3,7 +3,7 @@
 Beexar operator SDK for Node.js. Launch game sessions, and serve the four
 seamless-wallet callbacks the platform calls during play.
 
-Zero runtime dependencies. ESM and CommonJS. Node 18+.
+Zero runtime dependencies. ESM and CommonJS. Node 22+.
 
 ```bash
 npm install @beexar/sdk

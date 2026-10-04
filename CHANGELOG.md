@@ -4,6 +4,14 @@ All notable changes to `@beexar/sdk`. The version is shared across the Beexar
 SDKs for Node, PHP, Go and Python — the same number always means the same
 contract snapshot.
 
+## 1.1.0 — 2026-10-04
+
+Node 22 or newer, up from 18: Node 18 and 20 are past end of life upstream. No
+change to the API.
+
+- `Client` no longer checks for a global `fetch` when it is built — every
+  supported Node has one. `options.fetch` still replaces it.
+
 ## 1.0.2 — 2026-09-18
 
 No change to the code you consume. 1.0.1 reached PyPI, Packagist and the Go

@@ -45,9 +45,6 @@ export class Client {
     this.baseUrl = (options.baseUrl ?? PRODUCTION_BASE_URL).replace(/\/+$/, '')
     this.timeoutMs = options.timeoutMs ?? 10_000
     this.fetchImpl = options.fetch ?? globalThis.fetch
-    if (typeof this.fetchImpl !== 'function') {
-      throw new TypeError('Client: no global fetch available — pass one via options.fetch (Node < 18)')
-    }
   }
 
   /** Launches a real-money session and returns the URL to put in your iframe. */

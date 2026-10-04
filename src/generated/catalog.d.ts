@@ -120,6 +120,36 @@ export interface components {
              */
             logoUrl?: string;
         };
+        GameImage: {
+            /**
+             * @description Image format
+             * @example portrait_3x4
+             * @enum {string}
+             */
+            type: "square_640" | "portrait_3x4" | "landscape_16x9" | "social_1200x630";
+            /**
+             * @description Width in pixels
+             * @example 600
+             */
+            width: number;
+            /**
+             * @description Height in pixels
+             * @example 800
+             */
+            height: number;
+            /**
+             * Format: uri
+             * @description PNG image URL
+             * @example https://cdn.beexar.com/operators/2f6c/games/9a1e/catalog/5d3b.png
+             */
+            url: string;
+            /**
+             * Format: uri
+             * @description The same image as WebP, when available
+             * @example https://cdn.beexar.com/operators/2f6c/games/9a1e/catalog/5d3b.webp
+             */
+            webp_url?: string;
+        };
         GameInfo: {
             /**
              * @description Game display name
@@ -132,11 +162,11 @@ export interface components {
              */
             identifier: string;
             /**
-             * @description Game type
+             * @description Game type (rgs = an RGS game, e.g. Candy Crash)
              * @example slots
              * @enum {string}
              */
-            category: "dice" | "plinko" | "slots" | "crash";
+            category: "dice" | "plinko" | "slots" | "crash" | "rgs";
             /**
              * @description Operator slug
              * @example casinoxyz
@@ -166,6 +196,8 @@ export interface components {
              * @example https://cdn.beexar.com/defaults/catalog/default-640x640.png
              */
             thumbnail: string;
+            /** @description Every catalog image the game has, one per format, for operators that place the game in several lobby layouts: `square_640` (640×640 tile), `portrait_3x4` (600×800 tile), `landscape_16x9` (1280×720 tile or banner) and `social_1200x630` (1200×630 link-preview card). The square comes first when present. Empty when the game has none — `thumbnail` then carries the platform default. Each image is a PNG, with a WebP copy when available. */
+            images: components["schemas"]["GameImage"][];
             /** @description Supported currencies */
             currencies: string[];
             restrictions: {

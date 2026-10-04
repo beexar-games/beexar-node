@@ -215,6 +215,13 @@ export interface GameInfoKnown {
   bonus_buy?: boolean
   demo_available?: boolean
   thumbnail?: string
+  /**
+   * Every catalog image the game has, one per format, the square tile first:
+   * `square_640` (640×640), `portrait_3x4` (600×800), `landscape_16x9`
+   * (1280×720), `social_1200x630` (1200×630 link-preview card). Empty when
+   * the game has none — `thumbnail` then carries the platform default.
+   */
+  images?: GameImage[]
   currencies?: string[]
   restrictions?: {
     default?: {
@@ -222,6 +229,15 @@ export interface GameInfoKnown {
       blacklist?: string[]
     }
   }
+}
+
+/** One catalog image of a game (a PNG, with a WebP copy when available). */
+export interface GameImage {
+  type?: string
+  width?: number
+  height?: number
+  url?: string
+  webp_url?: string
 }
 
 export interface GameInfo extends GameInfoKnown {

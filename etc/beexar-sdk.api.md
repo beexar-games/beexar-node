@@ -173,6 +173,20 @@ export interface FinishResult {
     balance: Money;
 }
 
+// @public
+export interface GameImage {
+    // (undocumented)
+    height?: number;
+    // (undocumented)
+    type?: string;
+    // (undocumented)
+    url?: string;
+    // (undocumented)
+    webp_url?: string;
+    // (undocumented)
+    width?: number;
+}
+
 // @public (undocumented)
 export interface GameInfo extends GameInfoKnown {
     // (undocumented)
@@ -195,6 +209,7 @@ export interface GameInfoKnown {
     has_freespins?: boolean;
     // (undocumented)
     identifier?: string;
+    images?: GameImage[];
     // (undocumented)
     payout?: number;
     // (undocumented)
