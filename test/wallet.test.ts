@@ -3,7 +3,8 @@ import { Money } from '../src/money.js'
 import { WalletError, ApiCode, isFundsRelatedCode } from '../src/errors.js'
 import { sign } from '../src/signature.js'
 import { WalletServer, MAX_BODY_BYTES } from '../src/wallet.js'
-import type { WalletHandler } from '../src/types.js'
+import { routeFromPath } from '../src/adapters/raw-body.js'
+import type { FreespinsFinishRequest, WalletHandler } from '../src/types.js'
 
 const SECRET = 'unit-test-secret'
 
@@ -32,6 +33,16 @@ describe('signature', () => {
     const out = await server.dispatch('/balance', Buffer.from('{}'), '0'.repeat(64))
     expect(out.status).toBe(400)
     expect(JSON.parse(out.body).meta.api_code).toBe(ApiCode.FORBIDDEN)
+  })
+
+  it('refuses a non-ASCII signature as a plain 400/403, not a 500', async () => {
+    // 64 Latin-1 letters pass a character count but are not hex. The refusal
+    // must be the ordinary signature one; a crash inside verify would surface
+    // as an opaque 500, which the platform treats as retryable.
+    const server = new WalletServer(stub(), { apiSecret: SECRET, onWarning: () => {} })
+    const out = await server.dispatch('/balance', Buffer.from('{}'), 'é'.repeat(64))
+    expect(out.status).toBe(400)
+    expect(JSON.parse(out.body).meta.api_code).toBe('403')
   })
 
   it('names the re-serialisation trap when the body looks machine-generated', async () => {
@@ -170,5 +181,99 @@ describe('error envelope', () => {
       '{"account_id":"p","currency":"EUR","game_id":"d","round_id":"r","transactions":[{"id_provider":"t","type":"bet","amount":"1.00"}]}',
     )
     expect(JSON.parse(out.body).transactions[0].bonus_amount).toBe('0.00')
+  })
+})
+
+describe('/freespins/finish', () => {
+  const FINISH = '{"issue_id":"fs-1","amount":"12.50"}'
+
+  it('hands the handler the issue and a Money amount, and answers its balance', async () => {
+    let seen: FreespinsFinishRequest | undefined
+    const s = new WalletServer(
+      stub({
+        freespinsFinish: (req) => {
+          seen = req
+          return { balance: Money.parse('112.50') }
+        },
+      }),
+      { apiSecret: SECRET },
+    )
+    const out = await send(s, '/freespins/finish', FINISH)
+    expect(out.status).toBe(200)
+    expect(JSON.parse(out.body)).toEqual({ balance: '112.50' })
+    expect(seen?.issue_id).toBe('fs-1')
+    expect(seen?.amount.toString()).toBe('12.50')
+  })
+
+  it('accepts a zero amount, which /betwin refuses — the freespins won nothing', async () => {
+    let amount: Money | undefined
+    const s = new WalletServer(
+      stub({
+        freespinsFinish: (req) => {
+          amount = req.amount
+          return { balance: Money.parse('100.00') }
+        },
+      }),
+      { apiSecret: SECRET },
+    )
+    const out = await send(s, '/freespins/finish', '{"issue_id":"fs-1","amount":"0"}')
+    expect(out.status).toBe(200)
+    expect(amount?.isZero()).toBe(true)
+  })
+
+  it.each([
+    ['a negative amount', '{"issue_id":"fs-1","amount":"-1.00"}', 'amount: not a valid decimal amount'],
+    ['an amount as a JSON number', '{"issue_id":"fs-1","amount":12.5}', 'amount: not a valid decimal amount'],
+    ['no amount', '{"issue_id":"fs-1"}', 'amount: not a valid decimal amount'],
+    ['no issue_id', '{"amount":"12.50"}', 'issue_id: required, must be a non-empty string'],
+  ])('refuses %s before the handler runs', async (_l, body, msg) => {
+    const handler = vi.fn(() => ({ balance: Money.parse('1.00') }))
+    const s = new WalletServer(stub({ freespinsFinish: handler }), { apiSecret: SECRET })
+    const out = await send(s, '/freespins/finish', body)
+    expect(out.status).toBe(400)
+    expect(JSON.parse(out.body).msg).toBe(msg)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('answers like an unknown route when the handler does not implement it', async () => {
+    // A wallet written before freespins existed, or one that does not offer
+    // them: the four methods only. It must keep compiling and serving.
+    const fourMethods: WalletHandler = stub()
+    const s = new WalletServer(fourMethods, { apiSecret: SECRET })
+
+    const out = await send(s, '/freespins/finish', FINISH)
+    expect(out.status).toBe(400)
+    expect(JSON.parse(out.body)).toEqual({
+      code: 'invalid_argument',
+      msg: 'freespins finish is not implemented by this wallet',
+      meta: { api_code: ApiCode.NOT_FOUND, api_message: 'freespins finish is not implemented by this wallet' },
+    })
+    expect((await send(s, '/balance', '{"account_id":"p","currency":"EUR","game_id":"d"}')).status).toBe(200)
+  })
+
+  it('builds the two refusals the reference wallet answers with', () => {
+    expect(WalletError.invalidFreespinsIssue().toEnvelope().meta.api_code).toBe('610')
+    expect(WalletError.freespinsStateTransition().toEnvelope().meta.api_code).toBe('605')
+    expect(WalletError.invalidFreespinsIssue().status).toBe(400)
+  })
+})
+
+describe('routeFromPath', () => {
+  it.each([
+    ['/freespins/finish', '/freespins/finish'],
+    ['/x/freespins/finish', '/freespins/finish'],
+    ['/wallet/freespins/finish/', '/freespins/finish'],
+    ['/finish', '/finish'],
+    ['/x/finish', '/finish'],
+    ['/wallet/betwin?trace=1', '/betwin'],
+  ])('maps %s to %s — the longest route wins', (path, route) => {
+    // /freespins/finish ends with /finish too. Matching the shorter route
+    // first would hand a freespins result to the round's finish handler.
+    expect(routeFromPath(path)).toBe(route)
+  })
+
+  it('ignores everything else', () => {
+    expect(routeFromPath('/health')).toBeNull()
+    expect(routeFromPath('/freespins')).toBeNull()
   })
 })

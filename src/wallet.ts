@@ -6,6 +6,7 @@ import type {
   BetWinRequest,
   BetWinTransaction,
   FinishRequest,
+  FreespinsFinishRequest,
   RequestContext,
   RollbackRequest,
   RollbackTransaction,
@@ -169,8 +170,20 @@ function parseFinishRequest(body: Record<string, unknown>): FinishRequest {
   }
 }
 
+function parseFreespinsFinishRequest(body: Record<string, unknown>): FreespinsFinishRequest {
+  const issueId = requireString(body, 'issue_id')
+  // Zero is a valid result here — the freespins won nothing — so unlike a
+  // /betwin amount it is not refused. The shape rules are the same.
+  const amount = Money.tryParse(body['amount'])
+  if (amount === null) throw WalletError.badRequest('amount: not a valid decimal amount')
+  return { issue_id: issueId, amount }
+}
+
+/** Answered for /freespins/finish when the handler does not implement it. */
+const FREESPINS_NOT_IMPLEMENTED = 'freespins finish is not implemented by this wallet'
+
 /**
- * Turns the four callbacks into one pure function.
+ * Turns the callbacks into one pure function.
  *
  * `dispatch` takes bytes and a signature and returns a status and a body. No
  * framework type crosses this boundary, and it never sees a parsed body from
@@ -196,7 +209,7 @@ export class WalletServer {
     this.warn = options.onWarning ?? ((m) => console.warn(`[beexar] ${m}`))
   }
 
-  /** True for the four callback paths, ignoring any prefix you mounted at. */
+  /** True for the callback paths, ignoring any prefix you mounted at. */
   static isRoute(value: string): value is Route {
     return (ROUTES as readonly string[]).includes(value)
   }
@@ -210,6 +223,11 @@ export class WalletServer {
     try {
       if (!WalletServer.isRoute(route)) {
         throw WalletError.notFound(`unknown route: ${route}`)
+      }
+      if (route === '/freespins/finish' && typeof this.handler.freespinsFinish !== 'function') {
+        // An operator that does not issue freespins has nothing to settle; the
+        // route answers the way an unknown one does.
+        throw WalletError.notFound(FREESPINS_NOT_IMPLEMENTED)
       }
       if (!(rawBody instanceof Uint8Array)) {
         // A string here means something already decoded the bytes, and a decode
@@ -272,6 +290,12 @@ export class WalletServer {
       }
       case '/finish': {
         const res = await this.handler.finish(parseFinishRequest(body), ctx)
+        return ok({ balance: res.balance.toString() })
+      }
+      case '/freespins/finish': {
+        const req = parseFreespinsFinishRequest(body)
+        if (!this.handler.freespinsFinish) throw WalletError.notFound(FREESPINS_NOT_IMPLEMENTED)
+        const res = await this.handler.freespinsFinish(req, ctx)
         return ok({ balance: res.balance.toString() })
       }
     }

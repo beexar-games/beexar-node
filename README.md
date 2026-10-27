@@ -164,6 +164,76 @@ Your handler has **15 seconds**. The platform retries 5xx and timeouts for up to
 30 seconds with the same `id_provider`; it does not retry insufficient funds,
 bet limits, bad requests or signature failures.
 
+## Freespins (optional)
+
+Freespins follow the SoftSwiss Freespins API one to one: you give a player N
+free rounds at a fixed bet, Beexar plays them without touching the wallet, and
+reports what they won once, when the issue is over. Three calls go out from
+you; one callback comes back.
+
+```ts
+// The bet levels each game offers, per currency. A level is the total bet of one round.
+const levels = await beexar.betLevels({ games: ['dice'], currencies: ['EUR'] })
+
+// Record the issue on YOUR side first — the result will name only its issue_id.
+await ledger.recordFreespinsIssue('fs-123', 'player_123', 'EUR')
+await beexar.issueFreespins({
+  issue_id: 'fs-123',
+  games: ['dice'],
+  freespins_quantity: 10,
+  bet_level: 1,
+  valid_until: '2026-12-01T00:00:00Z', // UTC, at most one month ahead
+  account: { id: 'player_123', currency: 'EUR' },
+})
+// The player launches the game as usual (launchReal) and finds them there.
+
+await beexar.cancelFreespins({ issue_id: 'fs-123' }) // any time; a canceled issue is never reported
+```
+
+A repeated `issueFreespins` with the same terms answers like the first, so
+retry a timeout with the **same** request — a recomputed `valid_until` is other
+terms, refused with api_code 610.
+
+The result arrives on a fifth callback, `/freespins/finish`, carrying `issue_id`
+and `amount` — the total won, zero included. Implement it as an optional
+method of the same handler:
+
+```ts
+const handler: WalletHandler = {
+  // … balance, betWin, rollback, finish
+
+  async freespinsFinish(req) {
+    return db.transaction(async (tx) => {
+      const issue = await tx.freespinsIssue(req.issue_id)
+      if (!issue) throw WalletError.invalidFreespinsIssue()            // api_code 610
+      if (issue.finished) return { balance: issue.balanceAfter }       // a retry: credit nothing
+      if (issue.canceled) throw WalletError.freespinsStateTransition()  // api_code 605: Beexar accepted your cancel
+      return { balance: await tx.credit(issue, req.amount) }
+    })
+  },
+}
+```
+
+- It is sent **once per issue** — when the issue is played out, or expires with
+  spins played — and retried with the same body (after 1, 3 and 5 minutes, then
+  every 5) until you answer 200. Each attempt has the same **15 seconds** as the
+  round callbacks. Credit once per `issue_id`; a repeat returns the balance you
+  stored the first time.
+- Answer `605` only for an issue whose cancel Beexar accepted — Beexar never
+  sends a Finish for one; a `605` to a Finish you did receive is retried like
+  any refusal.
+- Configure it in the backoffice as the operator's **freespins finish URL**, the
+  fifth callback URL next to the four, e.g.
+  `https://your-host/wallet/freespins/finish`. Leave it empty if you do not
+  offer freespins — `issueFreespins` then answers api_code 406.
+- A handler without `freespinsFinish` keeps working unchanged; the route then
+  answers like an unknown one (api_code 404).
+- Paths are matched on their suffix, longest route first, so
+  `/wallet/freespins/finish` and `/wallet/finish` live under one prefix.
+
+The reference wallet implements it end to end:
+[`examples/inmemory-wallet.ts`](./examples/inmemory-wallet.ts).
+
 ## Types come from the spec
 
 The types in this package are generated from the published OpenAPI documents

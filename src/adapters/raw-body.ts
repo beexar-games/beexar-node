@@ -49,15 +49,23 @@ export function captureRawBody(req: unknown, _res: unknown, buf: Buffer): void {
 }
 
 /**
- * Maps a request path to one of the four callback routes.
+ * The routes, longest first. `/freespins/finish` ends with `/finish` too, so a
+ * suffix match has to try it before the shorter route it contains.
+ */
+const ROUTES_LONGEST_FIRST: readonly Route[] = [...ROUTES].sort((a, b) => b.length - a.length)
+
+/**
+ * Maps a request path to one of the callback routes.
  *
  * Matching is on the SUFFIX because the mount path belongs to the operator: the
  * gateway POSTs to the full callback URL configured in the backoffice,
- * prefix and all, so `/api/v2/beexar/betwin` is as valid as `/betwin`.
+ * prefix and all, so `/api/v2/beexar/betwin` is as valid as `/betwin`. The
+ * longest route wins, so `/wallet/freespins/finish` is the freespins result
+ * and never the round's `/finish`.
  */
 export function routeFromPath(path: string): Route | null {
   const clean = (path.split('?')[0] ?? '').replace(/\/+$/, '') || '/'
-  for (const r of ROUTES) {
+  for (const r of ROUTES_LONGEST_FIRST) {
     if (clean === r || clean.endsWith(r)) return r
   }
   return null

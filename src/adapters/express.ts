@@ -8,7 +8,8 @@ export { captureRawBody } from './raw-body.js'
 type Next = (err?: unknown) => void
 
 /**
- * Express / Connect middleware for the four callbacks.
+ * Express / Connect middleware for the callbacks — the four round callbacks and
+ * `/freespins/finish`.
  *
  * ```js
  * app.use('/wallet', beexarWallet(server))

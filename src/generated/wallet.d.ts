@@ -105,6 +105,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/freespins/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Freespins Finish
+         * @description Reports the result of a freespins issue: the total amount the player won
+         *     on its freespins, for the Game Aggregator to credit.
+         *
+         *     - Sent ONCE per `issue_id`, when the issue was fully played, or when it
+         *       expired with at least one freespin played. No intermediate results.
+         *       Never sent for an issue canceled with Freespins/Cancel.
+         *     - Idempotent: a repeated `issue_id` must return the original response
+         *       without crediting again. Retries carry the same body byte for byte.
+         *     - `amount` is zero at the issue currency's scale when the played
+         *       freespins won nothing: "0.00" in EUR, "0" in JPY.
+         *     - The response is invalid if the status code isn't `200` or no response
+         *       is received; the request is then retried with increasing delays
+         *       (1–3–5 minutes, then every 5 minutes) until it is accepted.
+         *     - Sent to the operator's dedicated freespins finish URL, separate from
+         *       the four round/player callback URLs.
+         *
+         */
+        post: operations["FreespinsFinish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -158,7 +193,7 @@ export interface components {
              */
             game_id: string;
             /**
-             * @description Session identifier in UUID format
+             * @description Session identifier in UUID format: the session of the game URL the balance is read for.
              * @example 7b115688-3849-490a-95bd-7c281d81c64c
              */
             session_id?: string;
@@ -199,7 +234,7 @@ export interface components {
             /** @description A list of bet and win transactions */
             transactions: components["schemas"]["RoundBetWinRequestTransaction"][];
             /**
-             * @description Session identifier in UUID format
+             * @description Session identifier in UUID format: the session the round was opened in, the same in every request of this `round_id` — also after the player relaunched the game and settles the round from a new session.
              * @example 7b115688-3849-490a-95bd-7c281d81c64c
              */
             session_id?: string;
@@ -282,7 +317,7 @@ export interface components {
             /** @description A list of rollback transactions */
             transactions: components["schemas"]["RoundRollbackRequestTransaction"][];
             /**
-             * @description Session identifier in UUID format
+             * @description Session identifier in UUID format: the session the round was opened in (the `session_id` of the /betwin being reversed).
              * @example 7b115688-3849-490a-95bd-7c281d81c64c
              */
             session_id?: string;
@@ -348,12 +383,31 @@ export interface components {
              */
             round_id: string;
             /**
-             * @description Session identifier in UUID format
+             * @description Session identifier in UUID format: the session the round was opened in (the `session_id` of its /betwin requests).
              * @example 7b115688-3849-490a-95bd-7c281d81c64c
              */
             session_id?: string;
         };
         RoundFinishResponse: {
+            /**
+             * @description Player account's balance
+             * @example 0.01
+             */
+            balance: string;
+        };
+        FreespinsFinishRequest: {
+            /**
+             * @description Freespins issue identifier on Game Aggregator's side (the `issue_id` of Freespins/Issue)
+             * @example e1290ccf-3729-49d7-84e2-ca55e016309f
+             */
+            issue_id: string;
+            /**
+             * @description Total amount won on the issue's freespins, in the issue's currency, at that currency's scale. Beexar sends at most the currency's decimals — never more than 16 fractional digits; the SDKs refuse more (conformance case 0032).
+             * @example 0.01
+             */
+            amount: string;
+        };
+        FreespinsFinishResponse: {
             /**
              * @description Player account's balance
              * @example 0.01
@@ -533,6 +587,51 @@ export interface operations {
                 };
             };
             /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    FreespinsFinish: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description HMAC-SHA256 signature of request body (hex encoded) */
+                "X-REQUEST-SIGN": components["parameters"]["RequestSignature"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreespinsFinishRequest"];
+            };
+        };
+        responses: {
+            /** @description Freespins result accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreespinsFinishResponse"];
+                };
+            };
+            /** @description Invalid request (unknown issue [api_code 610], issue canceled [api_code 605], signature error, etc.) */
             400: {
                 headers: {
                     [name: string]: unknown;

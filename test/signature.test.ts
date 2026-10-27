@@ -38,6 +38,12 @@ describe('verify', () => {
     ['empty', ''],
     ['wrong length', 'deadbeef'],
     ['wrong value', '0'.repeat(64)],
+    // 64 characters that are not hex: a character count alone lets them
+    // through, and they encode to 128 bytes — the shape that made
+    // timingSafeEqual throw instead of answering false.
+    ['64 non-ASCII chars', 'é'.repeat(64)],
+    ['63 non-ASCII chars', 'é'.repeat(63)],
+    ['uppercase hex', 'A'.repeat(64)],
   ])('rejects a %s signature', (_label, sig) => {
     expect(verify(Buffer.from('{"a":1}'), sig, SECRET)).toBe(false)
   })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Client } from '../src/launcher.js'
-import { BeexarApiError } from '../src/errors.js'
+import { ApiCode, BeexarApiError } from '../src/errors.js'
 import { verify } from '../src/signature.js'
 
 const SECRET = 'launcher-test-secret'
@@ -80,6 +80,89 @@ describe('Client.listGames', () => {
     expect(games).toEqual([{ identifier: 'dice' }])
     expect(calls[0]!.url).toContain('operator=casinoxyz')
     expect((calls[0]!.init.headers as Record<string, string>)['X-REQUEST-SIGN']).toBeUndefined()
+  })
+})
+
+describe('Client freespins calls', () => {
+  const issue = {
+    issue_id: 'fs-1',
+    games: ['dice', 'plinko'],
+    freespins_quantity: 10,
+    bet_level: 2,
+    valid_until: '2026-11-30T12:00:00Z',
+    account: { id: 'player_1', currency: 'EUR' },
+  }
+
+  it('issueFreespins signs the exact bytes it posts, with casino_id added', async () => {
+    const { calls, fetchImpl } = recorder({ status: 200, body: {} })
+    await expect(client(fetchImpl).issueFreespins(issue)).resolves.toBeUndefined()
+
+    const call = calls[0]!
+    expect(call.url).toBe('https://gw.test/api/v1/softswiss/freespins/issue')
+    expect(call.init.method).toBe('POST')
+    const sent = call.init.body as string
+    const signature = (call.init.headers as Record<string, string>)['X-REQUEST-SIGN']!
+    expect(verify(sent, signature, SECRET)).toBe(true)
+    // Integers stay integers on the wire; the platform's schema refuses "10".
+    expect(JSON.parse(sent)).toEqual({ casino_id: 'casinoxyz', ...issue })
+  })
+
+  it('cancelFreespins posts the issue_id, signed', async () => {
+    const { calls, fetchImpl } = recorder({ status: 200, body: {} })
+    await expect(client(fetchImpl).cancelFreespins({ issue_id: 'fs-1' })).resolves.toBeUndefined()
+
+    const call = calls[0]!
+    expect(call.url).toBe('https://gw.test/api/v1/softswiss/freespins/cancel')
+    expect(JSON.parse(call.init.body as string)).toEqual({ casino_id: 'casinoxyz', issue_id: 'fs-1' })
+    const signature = (call.init.headers as Record<string, string>)['X-REQUEST-SIGN']!
+    expect(verify(call.init.body as string, signature, SECRET)).toBe(true)
+  })
+
+  it('betLevels sends the filters and unwraps bet_levels', async () => {
+    const levels = [
+      {
+        games: ['dice'],
+        currencies: [{ currency: 'EUR', bet_levels: [{ bet_level: 1, amount: '0.10' }, { bet_level: 2, amount: '0.20' }] }],
+      },
+    ]
+    const { calls, fetchImpl } = recorder({ status: 200, body: { bet_levels: levels } })
+    const got = await client(fetchImpl).betLevels({ games: ['dice'], currencies: ['EUR'] })
+
+    expect(got).toEqual(levels)
+    expect(calls[0]!.url).toBe('https://gw.test/api/v1/softswiss/bet/levels')
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({
+      casino_id: 'casinoxyz',
+      games: ['dice'],
+      currencies: ['EUR'],
+    })
+  })
+
+  it('betLevels without filters asks for every game and currency', async () => {
+    const { calls, fetchImpl } = recorder({ status: 200, body: { bet_levels: [] } })
+    expect(await client(fetchImpl).betLevels()).toEqual([])
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ casino_id: 'casinoxyz' })
+  })
+
+  it('surfaces a refusal as BeexarApiError keyed on api_code', async () => {
+    const { fetchImpl } = recorder({
+      status: 400,
+      body: {
+        code: 'invalid_argument',
+        msg: 'issue_id fs-1 was issued with other terms: valid_until',
+        meta: { api_code: '610', api_message: 'issue_id fs-1 was issued with other terms: valid_until' },
+      },
+    })
+    await expect(client(fetchImpl).issueFreespins(issue)).rejects.toSatisfy(
+      (e: BeexarApiError) =>
+        e.apiCode === ApiCode.FREESPINS_INVALID_ISSUE && !e.isRetryable() && e.apiMessage.includes('valid_until'),
+    )
+  })
+
+  it('surfaces a 5xx as retryable', async () => {
+    const { fetchImpl } = recorder({ status: 500, body: { code: 'internal', meta: { api_code: '500' } } })
+    await expect(client(fetchImpl).cancelFreespins({ issue_id: 'fs-1' })).rejects.toSatisfy(
+      (e: BeexarApiError) => e.isRetryable(),
+    )
   })
 })
 

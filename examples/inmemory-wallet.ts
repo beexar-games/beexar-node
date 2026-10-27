@@ -8,6 +8,8 @@ import {
   type BetWinTransactionResult,
   type FinishRequest,
   type FinishResult,
+  type FreespinsFinishRequest,
+  type FreespinsFinishResult,
   type RollbackRequest,
   type RollbackResult,
   type RollbackTransactionResult,
@@ -30,6 +32,10 @@ import {
  *   3. **Then apply, atomically.** Either every transaction in the request
  *      lands or none does, and an insufficient-funds answer reports the balance
  *      as it was BEFORE the batch — because nothing moved.
+ *
+ * Freespins follow the same discipline with `issue_id` as the key: record the
+ * issue before you send Freespins/Issue, credit its `/freespins/finish` once,
+ * and answer a repeat with the balance you stored the first time.
  *
  * The single lock below stands in for your `BEGIN`/`COMMIT`. In a real wallet,
  * the dedupe read, the tombstone read and the balance update must all be in one
@@ -55,21 +61,37 @@ export interface StoredAccount {
   bet_limited?: boolean
 }
 
+/** Where a freespins issue stands on your side. */
+export type FreespinsIssueStatus = 'issued' | 'canceled' | 'finished'
+
+export interface StoredFreespinsIssue {
+  /** Whose freespins these are — /freespins/finish does not say. */
+  account_id: string
+  currency: string
+  status: FreespinsIssueStatus
+  /** Recorded when /freespins/finish credits the issue. */
+  amount?: string
+  /** The balance you answered then; a repeat answers it again. */
+  balance_after?: string
+}
+
 export interface LedgerState {
   accounts: Record<string, StoredAccount>
   transactions: Record<string, StoredTransaction>
   tombstones: string[]
+  freespins_issues: Record<string, StoredFreespinsIssue>
 }
 
 export class InMemoryWallet implements WalletHandler {
   private readonly accounts = new Map<string, { currency: string; balance: Money; betLimited: boolean }>()
   private readonly transactions = new Map<string, StoredTransaction>()
   private readonly tombstones = new Set<string>()
+  private readonly freespinsIssues = new Map<string, StoredFreespinsIssue>()
   private readonly rounds = new Map<string, string>()
   private nextTx: number
   private nextRound = 1
 
-  constructor(state: LedgerState = { accounts: {}, transactions: {}, tombstones: [] }) {
+  constructor(state: LedgerState = { accounts: {}, transactions: {}, tombstones: [], freespins_issues: {} }) {
     for (const [id, a] of Object.entries(state.accounts)) {
       this.accounts.set(id, {
         currency: a.currency,
@@ -79,6 +101,7 @@ export class InMemoryWallet implements WalletHandler {
     }
     for (const [id, t] of Object.entries(state.transactions)) this.transactions.set(id, { ...t })
     for (const id of state.tombstones) this.tombstones.add(id)
+    for (const [id, i] of Object.entries(state.freespins_issues)) this.freespinsIssues.set(id, { ...i })
 
     // Continue the id sequence rather than restarting it, so ids stay unique
     // across a restored state.
@@ -102,7 +125,14 @@ export class InMemoryWallet implements WalletHandler {
     }
     const transactions: Record<string, StoredTransaction> = {}
     for (const [id, t] of this.transactions) transactions[id] = { ...t }
-    return { accounts, transactions, tombstones: [...this.tombstones] }
+    const freespinsIssues: Record<string, StoredFreespinsIssue> = {}
+    for (const [id, i] of this.freespinsIssues) freespinsIssues[id] = { ...i }
+    return {
+      accounts,
+      transactions,
+      tombstones: [...this.tombstones],
+      freespins_issues: freespinsIssues,
+    }
   }
 
   // ------------------------------------------------------------------ /balance
@@ -236,6 +266,61 @@ export class InMemoryWallet implements WalletHandler {
     // Nothing to settle: the round's money already moved through /betwin.
     // Answering the current balance and staying idempotent is the whole job.
     return { balance: this.account(req.account_id).balance }
+  }
+
+  // --------------------------------------------------------- freespins issue
+
+  /**
+   * Records an issue BEFORE you send it with `Client.issueFreespins`.
+   * /freespins/finish names only the `issue_id`, so this record is what says
+   * whose wallet, in which currency, to credit — and a Finish can never arrive
+   * for an issue you do not know.
+   */
+  recordFreespinsIssue(issueId: string, accountId: string, currency: string): void {
+    if (!this.freespinsIssues.has(issueId)) {
+      this.freespinsIssues.set(issueId, { account_id: accountId, currency, status: 'issued' })
+    }
+  }
+
+  /**
+   * Marks an issue canceled once Beexar ACCEPTED your `Client.cancelFreespins`.
+   * A refused cancel (620: already played out) leaves it issued, because its
+   * /freespins/finish is on its way.
+   */
+  cancelFreespinsIssue(issueId: string): void {
+    const issue = this.freespinsIssues.get(issueId)
+    if (issue?.status === 'issued') issue.status = 'canceled'
+  }
+
+  // -------------------------------------------------------- /freespins/finish
+
+  freespinsFinish(req: FreespinsFinishRequest): FreespinsFinishResult {
+    const issue = this.freespinsIssues.get(req.issue_id)
+    if (!issue) throw WalletError.invalidFreespinsIssue(`unknown freespins issue ${req.issue_id}`)
+
+    // 1. Replay first, exactly as for id_provider: the platform retries until
+    //    it gets a 200, and the retry must credit nothing and answer the
+    //    balance stored the first time.
+    if (issue.status === 'finished') {
+      if (issue.balance_after === undefined) {
+        // Never credit a finished issue again; a 500 makes the platform retry.
+        throw new Error(`freespins issue ${req.issue_id} is finished but has no stored balance`)
+      }
+      return { balance: Money.parse(issue.balance_after) }
+    }
+    // 2. A canceled issue has no result to take.
+    if (issue.status === 'canceled') {
+      throw WalletError.freespinsStateTransition(`freespins issue ${req.issue_id} was canceled`)
+    }
+
+    // 3. Credit, and record the answer with the issue — one transaction in a
+    //    real ledger, like everything else here. Zero is a valid result.
+    const account = this.account(issue.account_id)
+    account.balance = account.balance.add(req.amount)
+    issue.status = 'finished'
+    issue.amount = req.amount.toString()
+    issue.balance_after = account.balance.toString()
+    return { balance: account.balance }
   }
 
   // -------------------------------------------------------------------- utils

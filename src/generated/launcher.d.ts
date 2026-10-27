@@ -51,6 +51,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/softswiss/bet/levels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bet levels of the provider's games (SoftSwiss Bet/Levels)
+         * @description SoftSwiss `a8r_provider.Bet/Levels`: the bet levels of every game the
+         *     operator can issue freespins for, per currency. A level is the TOTAL
+         *     bet of one round; `Freespins/Issue` names a level, and the bet it
+         *     stands for is the amount listed here for the game and the player's
+         *     currency at the time of the issue.
+         *
+         *     - Levels run 1..N without gaps, amounts strictly ascending.
+         *     - Each game appears once; games share an entry only when their levels
+         *       are identical in every currency.
+         *     - Unknown games and currencies in the filters are ignored, not
+         *       refused. Without `games` / `currencies` every game / currency is
+         *       listed.
+         *     - A game is listed only when its engine plays operator freespins. A
+         *       game whose RGS engine does not answer at the moment is left out as
+         *       well — temporarily: ask again later.
+         *
+         */
+        post: operations["softswissBetLevels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/softswiss/freespins/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue freespins to a player (SoftSwiss Freespins/Issue)
+         * @description SoftSwiss `a8r_provider.Freespins/Issue`: give the player `account`
+         *     `freespins_quantity` free rounds in the listed games, at the bet that
+         *     `bet_level` stands for in each game and the account currency
+         *     (Bet/Levels), playable until `valid_until`. The quantity is shared by
+         *     all the listed games, not given in each.
+         *
+         *     The player just launches a listed game (Launcher/Real, nothing new in
+         *     it): the game opens with the freespins, its bet locked. Their rounds
+         *     never reach the wallet; when the issue is played out, or expires with
+         *     rounds played, the total won is reported once with
+         *     `Freespins/Finish` (the operator's freespins finish callback URL).
+         *
+         *     Repeating an `issue_id` with the same terms answers as the first
+         *     Issue did, `200 {}`, without issuing twice — the idempotency SoftSwiss
+         *     asks of the provider (Provider API v.2026.06.22). DOCUMENTED
+         *     DEVIATION: a repeat with OTHER terms under a known `issue_id` is
+         *     refused (`meta.api_code` 610, `api_message` names the fields) rather
+         *     than answered 200 — a second set of terms under one id is a caller
+         *     bug, and a silent 200 would hide which terms the player actually got.
+         *
+         */
+        post: operations["softswissFreespinsIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/softswiss/freespins/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel issued freespins (SoftSwiss Freespins/Cancel)
+         * @description SoftSwiss `a8r_provider.Freespins/Cancel`, at any time — even while
+         *     the player is playing them. A canceled issue never sends its
+         *     `Freespins/Finish`: what its rounds won is forfeited. A round already
+         *     playing finishes. Canceling an `issue_id` that was never issued is
+         *     accepted and remembered: an Issue with that id arriving later is
+         *     refused (605).
+         *
+         */
+        post: operations["softswissFreespinsCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -107,13 +207,95 @@ export interface components {
              */
             balance: string;
             urls?: {
-                /** @description URL to redirect after closing game */
+                /** @description URL of the game's Home (lobby) button. When given, the button leads there; when omitted, the game shows no Home button. */
                 return_url?: string;
             };
             /** @description Two-letter country code, supports region identifiers (e.g. CA-ON) */
             jurisdiction?: string;
         } & {
             [key: string]: unknown;
+        };
+        FreespinsIssueRequest: {
+            /** @description Casino identifier (operator slug) */
+            casino_id: string;
+            /** @description Freespins issue identifier on the casino's side */
+            issue_id: string;
+            /** @description Game identifiers (game slugs). The quantity is shared by all of
+             *     them, not given in each. An empty list is refused with
+             *     `meta.api_code` 602.
+             *      */
+            games: string[];
+            /**
+             * Format: int64
+             * @description Number of free rounds (at most 10000)
+             */
+            freespins_quantity: number;
+            /**
+             * Format: int64
+             * @description Bet level (Bet/Levels) — the bet of every free round
+             */
+            bet_level: number;
+            /** @description Until when the freespins are playable, at most 1 month ahead
+             *     (SoftSwiss time format, e.g. 2025-12-31T15:30:00Z)
+             *      */
+            valid_until: string;
+            account: components["schemas"]["Account"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description Empty on success (SoftSwiss FreespinsIssueResponse). */
+        FreespinsIssueResponse: Record<string, never>;
+        FreespinsCancelRequest: {
+            /** @description Casino identifier (operator slug) */
+            casino_id: string;
+            /** @description Freespins issue identifier on the casino's side */
+            issue_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description Empty on success (SoftSwiss FreespinsCancelResponse). */
+        FreespinsCancelResponse: Record<string, never>;
+        BetLevelsRequest: {
+            /** @description Casino identifier (operator slug) */
+            casino_id: string;
+            /** @description Game identifiers (game slugs, `identifier2` in the SoftSwiss
+             *     game list). Unknown ones are ignored; absent = every game.
+             *      */
+            games?: string[];
+            /** @description Currency codes. Unknown ones are ignored; absent = every
+             *     currency.
+             *      */
+            currencies?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        BetLevelsResponse: {
+            /** @description One entry per group of games whose bet levels are identical in
+             *     every currency; each game appears once.
+             *      */
+            bet_levels: components["schemas"]["BetLevelData"][];
+        };
+        BetLevelData: {
+            /** @description Game identifiers (game slugs) */
+            games: string[];
+            currencies: components["schemas"]["CurrencyBetLevels"][];
+        };
+        CurrencyBetLevels: {
+            /** @description Three- or four-letter currency code */
+            currency: string;
+            /** @description Levels 1..N without gaps, amounts strictly ascending */
+            bet_levels: components["schemas"]["BetLevel"][];
+        };
+        BetLevel: {
+            /**
+             * Format: int32
+             * @description Bet level
+             */
+            bet_level: number;
+            /** @description The TOTAL bet of one round at this level in the currency's major
+             *     unit (never a bet per line).
+             *      */
+            amount: string;
         };
         LauncherResponse: {
             /**
@@ -142,9 +324,9 @@ export interface components {
             api_message: string;
         };
         LauncherURLs: {
-            /** @description URL to redirect player after game */
+            /** @description URL of the game's Home (lobby) button. When given, the button leads there; when omitted, the game shows no Home button. */
             return_url?: string;
-            /** @description URL for player to make a deposit */
+            /** @description URL of the game's Deposit (cashier) button and of the low-balance prompt. When given, they lead there; when omitted, the game shows no Deposit button. */
             deposit_url?: string;
         };
         Account: {
@@ -288,6 +470,188 @@ export interface operations {
                 };
             };
             /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    softswissBetLevels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BetLevelsRequest"];
+            };
+        };
+        responses: {
+            /** @description The bet levels */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BetLevelsResponse"];
+                };
+            };
+            /** @description Client error. `code` is always `invalid_argument`; the specific
+             *     meaning is in `meta.api_code` — 400 malformed body, 404 casino_id
+             *     unknown, 410 casino disabled, 420 endpoint not available for this
+             *     integration_type.
+             *      */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid request signature (`meta.api_code` 403), the only case
+             *     answered with 403.
+             *      */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    softswissFreespinsIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreespinsIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description The freespins are issued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreespinsIssueResponse"];
+                };
+            };
+            /** @description Client error. `code` is always `invalid_argument`; the specific
+             *     meaning is in `meta.api_code` — 400 malformed body or
+             *     freespins_quantity above 10000, 404 casino_id unknown, 406
+             *     freespins not available for the casino (no freespins finish
+             *     callback URL configured), 410 casino disabled, 420 endpoint not
+             *     available for this integration_type, 154 currency not allowed,
+             *     405 a requested game is unknown to the casino, 608 a requested
+             *     game plays no freespins, 601 a requested game has no bet levels
+             *     in the currency or bet_level is above them, 602 no game, 603 bad
+             *     valid_until, 605 the issue_id was canceled
+             *     before it was issued, 610 the issue_id was issued with other
+             *     terms.
+             *      */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid request signature (`meta.api_code` 403). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error (retryable). Also answered when a requested
+             *     game is temporarily unavailable because its RGS engine did not
+             *     answer, or the casino cannot be looked up for the moment: the
+             *     game is hidden or the casino unknown for the moment, not refused
+             *     — retry the same request later (a 405, 608 or 601 would be
+             *     final).
+             *      */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    softswissFreespinsCancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreespinsCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description The freespins are canceled (or already were) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreespinsCancelResponse"];
+                };
+            };
+            /** @description Client error. `code` is always `invalid_argument`; the specific
+             *     meaning is in `meta.api_code` — 400 malformed body, 404 casino_id
+             *     unknown, 410 casino disabled, 420 endpoint not available for this
+             *     integration_type, 611 the issue has already expired, 620 the
+             *     issue has been played and can't be canceled.
+             *      */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid request signature (`meta.api_code` 403). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error (retryable) */
             500: {
                 headers: {
                     [name: string]: unknown;

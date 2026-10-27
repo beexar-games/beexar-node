@@ -10,10 +10,14 @@ import type { Money } from './money.js'
  * also keeps all four Beexar SDKs literally identical in shape.
  */
 
-/** The four callback routes, exactly as the contract names them. */
-export type Route = '/balance' | '/betwin' | '/rollback' | '/finish'
+/**
+ * The callback routes, exactly as the contract names them: the four every
+ * wallet serves, and `/freespins/finish`, which only a wallet that issues
+ * freespins does (see {@link WalletHandler.freespinsFinish}).
+ */
+export type Route = '/balance' | '/betwin' | '/rollback' | '/finish' | '/freespins/finish'
 
-export const ROUTES: readonly Route[] = ['/balance', '/betwin', '/rollback', '/finish']
+export const ROUTES: readonly Route[] = ['/balance', '/betwin', '/rollback', '/finish', '/freespins/finish']
 
 /** Everything about the request that is not part of the parsed body. */
 export interface RequestContext {
@@ -131,10 +135,32 @@ export interface FinishResult {
   balance: Money
 }
 
+// ------------------------------------------------------- /freespins/finish
+
+/**
+ * The result of a freespins issue: what its freespins won in total, for you to
+ * credit to the player you issued them to.
+ */
+export interface FreespinsFinishRequest {
+  /** YOUR id for the issue — the `issue_id` you sent to `Client.issueFreespins`. */
+  issue_id: string
+  /**
+   * The total won, in the issue's currency at its scale. Zero or more — zero
+   * (`"0.00"` in EUR, `"0"` in JPY) is a valid result, not an error: the
+   * freespins were played and won nothing.
+   */
+  amount: Money
+}
+
+export interface FreespinsFinishResult {
+  /** The balance after the credit. On a repeat, the one you returned the first time. */
+  balance: Money
+}
+
 // ----------------------------------------------------------------- handler
 
 /**
- * The four methods you implement against your own ledger. Everything else —
+ * The methods you implement against your own ledger. Everything else —
  * signature verification, parsing, validation, the Twirp error envelope — is
  * the SDK's job.
  */
@@ -143,6 +169,18 @@ export interface WalletHandler {
   betWin(req: BetWinRequest, ctx: RequestContext): BetWinResult | Promise<BetWinResult>
   rollback(req: RollbackRequest, ctx: RequestContext): RollbackResult | Promise<RollbackResult>
   finish(req: FinishRequest, ctx: RequestContext): FinishResult | Promise<FinishResult>
+  /**
+   * `/freespins/finish` — only if you issue freespins. Credit `amount` to the
+   * player of the issue, once per `issue_id`: the platform sends it once and
+   * retries the same body until it gets a 200, so a repeat must answer the
+   * balance you stored the first time and credit nothing.
+   *
+   * Leave it out and the route answers like an unknown one (api_code 404).
+   */
+  freespinsFinish?(
+    req: FreespinsFinishRequest,
+    ctx: RequestContext,
+  ): FreespinsFinishResult | Promise<FreespinsFinishResult>
 }
 
 // ---------------------------------------------------------------- launcher
@@ -248,4 +286,71 @@ export interface ListGamesQuery {
   /** Defaults to the client's `casinoId`. */
   operator?: string
   active?: boolean
+}
+
+// --------------------------------------------------------------- freespins
+
+/**
+ * Freespins/Issue: `freespins_quantity` free rounds for one player, at one bet
+ * level, in one or more games. The client adds `casino_id`.
+ *
+ * Record the issue in your own ledger BEFORE sending it: the result arrives
+ * later on `/freespins/finish` carrying only `issue_id` and `amount`, so your
+ * record is what says whose wallet, in which currency, to credit.
+ */
+export interface FreespinsIssueRequest {
+  /**
+   * YOUR id for this issue, at most 255 characters. Repeating it with the same
+   * terms answers like the first call; with other terms it is refused (610).
+   */
+  issue_id: string
+  /** Game slugs. The quantity is shared by all of them, not given in each. */
+  games: string[]
+  /** At most 10000. */
+  freespins_quantity: number
+  /** A `bet_level` from {@link Client.betLevels} — the total bet of every free round. */
+  bet_level: number
+  /**
+   * When the freespins stop being playable, at most one month ahead, in UTC
+   * with a `Z`: `new Date(Date.now() + 7 * 86400e3).toISOString()`.
+   */
+  valid_until: string
+  /** The player, as in a launch. `id` and `currency` decide whose freespins these are. */
+  account: LaunchAccount
+}
+
+/** Freespins/Cancel. The client adds `casino_id`. */
+export interface FreespinsCancelRequest {
+  /** The `issue_id` you issued, or one you are about to: a cancel can come first. */
+  issue_id: string
+}
+
+/** Bet/Levels filters. Unknown values are ignored; leave one out for all of them. */
+export interface BetLevelsRequest {
+  /** Game slugs. */
+  games?: string[]
+  /** Currency codes. */
+  currencies?: string[]
+}
+
+/** One bet level: what `bet_level` costs per round in one currency. */
+export interface BetLevel {
+  bet_level: number
+  /**
+   * The TOTAL bet of one round, a decimal string in the currency's main unit —
+   * `Money.parse(level.amount)` for arithmetic.
+   */
+  amount: string
+}
+
+export interface CurrencyBetLevels {
+  currency: string
+  /** Levels 1..N without gaps, amounts strictly ascending. */
+  bet_levels: BetLevel[]
+}
+
+/** The games that share the same bet levels in every currency. Each game appears once. */
+export interface BetLevelData {
+  games: string[]
+  currencies: CurrencyBetLevels[]
 }

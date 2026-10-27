@@ -22,11 +22,20 @@ import type { Money } from '../money.js'
 import type {
   BalanceRequest,
   BalanceResult,
+  BetLevel,
+  BetLevelData,
+  BetLevelsRequest,
   BetWinRequest,
   BetWinResult,
+  CurrencyBetLevels,
   FinishRequest,
   FinishResult,
+  FreespinsCancelRequest,
+  FreespinsFinishRequest,
+  FreespinsFinishResult,
+  FreespinsIssueRequest,
   GameInfoKnown,
+  LaunchAccount,
   LaunchResult,
   RollbackRequest,
   RollbackResult,
@@ -131,9 +140,74 @@ export type _FinishRequest = Assert<Exact<FinishRequest, W['RoundFinishRequest']
 export type _FinishResultKeys = Assert<SameKeys<W['RoundFinishResponse'], FinishResult>>
 export type _FinishResult = Assert<Exact<FinishResult, { balance: Money }>>
 
+// ------------------------------------------------------- /freespins/finish
+// Deviation:
+//   `amount`  Money instead of string; validated before the handler runs.
+//             Unlike /betwin, zero is a valid amount here.
+type FreespinsFinishRequestFromSpec = Omit<W['FreespinsFinishRequest'], 'amount'> & { amount: Money }
+export type _FreespinsFinishRequestKeys = Assert<
+  SameKeys<W['FreespinsFinishRequest'], FreespinsFinishRequest>
+>
+export type _FreespinsFinishRequest = Assert<
+  Exact<FreespinsFinishRequest, FreespinsFinishRequestFromSpec>
+>
+export type _FreespinsFinishResultKeys = Assert<
+  SameKeys<W['FreespinsFinishResponse'], FreespinsFinishResult>
+>
+export type _FreespinsFinishResult = Assert<Exact<FreespinsFinishResult, { balance: Money }>>
+
 // ---------------------------------------------------------------- launcher
 export type _LaunchResultKeys = Assert<SameKeys<L['LauncherResponse'], LaunchResult>>
 export type _LaunchResult = Assert<Exact<LaunchResult, L['LauncherResponse']>>
+
+/**
+ * The declared fields of a schema, without the index signature that
+ * `additionalProperties: true` becomes. Left in, `string` would be one of the
+ * keys and every key-set comparison would pass vacuously.
+ */
+type Declared<T> = {
+  [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K]
+}
+
+// The launch account, which Freespins/Issue carries too, field for field. Its
+// fields are mostly optional, which mutual assignability alone cannot see
+// missing — hence the key check beside it.
+export type _LaunchAccountKeys = Assert<SameKeys<Declared<L['Account']>, LaunchAccount>>
+export type _LaunchAccount = Assert<Exact<LaunchAccount, Declared<L['Account']>>>
+
+// --------------------------------------------------------------- freespins
+// The requests are closed types here, unlike the launch requests: everything
+// the spec declares, nothing else. Deviation, in all three:
+//   `casino_id`  the client adds it from its options; the caller never passes it.
+type IssueFromSpec = Omit<Declared<L['FreespinsIssueRequest']>, 'casino_id' | 'account'> & {
+  account: LaunchAccount
+}
+export type _FreespinsIssueRequestKeys = Assert<
+  SameKeys<Omit<Declared<L['FreespinsIssueRequest']>, 'casino_id'>, FreespinsIssueRequest>
+>
+export type _FreespinsIssueRequest = Assert<Exact<FreespinsIssueRequest, IssueFromSpec>>
+
+export type _FreespinsCancelRequestKeys = Assert<
+  SameKeys<Omit<Declared<L['FreespinsCancelRequest']>, 'casino_id'>, FreespinsCancelRequest>
+>
+export type _FreespinsCancelRequest = Assert<
+  Exact<FreespinsCancelRequest, Omit<Declared<L['FreespinsCancelRequest']>, 'casino_id'>>
+>
+export type _BetLevelsRequestKeys = Assert<
+  SameKeys<Omit<Declared<L['BetLevelsRequest']>, 'casino_id'>, BetLevelsRequest>
+>
+export type _BetLevelsRequest = Assert<
+  Exact<BetLevelsRequest, Omit<Declared<L['BetLevelsRequest']>, 'casino_id'>>
+>
+
+// The bet levels answer, which `betLevels()` unwraps to its `bet_levels`.
+export type _BetLevelsResponse = Assert<Exact<{ bet_levels: BetLevelData[] }, L['BetLevelsResponse']>>
+export type _BetLevelDataKeys = Assert<SameKeys<L['BetLevelData'], BetLevelData>>
+export type _BetLevelData = Assert<Exact<BetLevelData, L['BetLevelData']>>
+export type _CurrencyBetLevelsKeys = Assert<SameKeys<L['CurrencyBetLevels'], CurrencyBetLevels>>
+export type _CurrencyBetLevels = Assert<Exact<CurrencyBetLevels, L['CurrencyBetLevels']>>
+export type _BetLevelKeys = Assert<SameKeys<L['BetLevel'], BetLevel>>
+export type _BetLevel = Assert<Exact<BetLevel, L['BetLevel']>>
 
 // `GameInfo` and the launch requests are open bags by design — the contract
 // declares `additionalProperties: true` and the catalogue grows fields without

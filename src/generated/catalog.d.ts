@@ -111,6 +111,9 @@ export interface components {
             vars: {
                 [key: string]: string;
             };
+            background?: string;
+            decoration?: string;
+            colorScheme?: string;
             /**
              * @description Preloader logo: an absolute URL or a storage key the client
              *     prefixes with `CDN_URL` (mirrors the frontend `resolveURL`).
@@ -153,20 +156,20 @@ export interface components {
         GameInfo: {
             /**
              * @description Game display name
-             * @example Lucky Slots
+             * @example Lucky Dice
              */
             title: string;
             /**
              * @description Game slug (unique identifier)
-             * @example slot
+             * @example dice
              */
             identifier: string;
             /**
-             * @description Game type (rgs = an RGS game, e.g. Candy Crash)
-             * @example slots
+             * @description Game type (rgs = a game served by the RGS engine)
+             * @example dice
              * @enum {string}
              */
-            category: "dice" | "plinko" | "slots" | "crash" | "rgs";
+            category: "dice" | "plinko" | "crash" | "rgs";
             /**
              * @description Operator slug
              * @example casinoxyz
@@ -184,7 +187,8 @@ export interface components {
              * @enum {string}
              */
             volatility_rating: "low" | "medium" | "high" | "very_high";
-            /** @description Whether the game supports free spins */
+            /** @description Whether the game has its own in-game free spins (a game feature, not the operator Freespins API)
+             *      */
             has_freespins: boolean;
             /** @description Whether the game supports bonus buy */
             bonus_buy: boolean;

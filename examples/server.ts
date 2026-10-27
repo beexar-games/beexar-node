@@ -6,7 +6,8 @@
  *
  * Point the four callback URLs in the backoffice at
  * http://<host>/wallet/{balance,betwin,rollback,finish} and run the Integration
- * Test Game against it.
+ * Test Game against it. If you issue freespins, point the freespins finish URL
+ * at http://<host>/wallet/freespins/finish as well.
  */
 import { createServer } from 'node:http'
 import { WalletServer } from '@beexar/sdk'
@@ -23,6 +24,7 @@ const wallet = new InMemoryWallet({
   accounts: { player_1: { currency: 'EUR', balance: '1000.00' } },
   transactions: {},
   tombstones: [],
+  freespins_issues: {},
 })
 
 const server = new WalletServer(wallet, { apiSecret })
@@ -30,5 +32,5 @@ const port = Number(process.env['PORT'] ?? 8080)
 
 createServer(nodeHttpWallet(server)).listen(port, () => {
   console.log(`beexar wallet listening on :${port}`)
-  console.log(`  POST /balance  /betwin  /rollback  /finish`)
+  console.log(`  POST /balance  /betwin  /rollback  /finish  /freespins/finish`)
 })

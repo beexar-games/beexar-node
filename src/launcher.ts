@@ -1,6 +1,10 @@
 import { BeexarApiError } from './errors.js'
 import { sign } from './signature.js'
 import type {
+  BetLevelData,
+  BetLevelsRequest,
+  FreespinsCancelRequest,
+  FreespinsIssueRequest,
   GameInfo,
   LaunchDemoRequest,
   LaunchRealRequest,
@@ -24,7 +28,8 @@ export interface ClientOptions {
 }
 
 /**
- * Calls you make to Beexar: launch a session, list the catalogue.
+ * Calls you make to Beexar: launch a session, list the catalogue, issue and
+ * cancel freespins, read the bet levels they are issued at.
  *
  * Every POST is signed with `hex(HMAC-SHA256(body, apiSecret))` over the exact
  * bytes that go on the wire — the body is serialised once, signed, and sent.
@@ -78,6 +83,47 @@ export class Client {
     const body = await readJson(res)
     if (!res.ok) throw new BeexarApiError(res.status, body as never)
     return ((body as { games?: GameInfo[] }).games ?? []) as GameInfo[]
+  }
+
+  /**
+   * Freespins/Issue: gives a player free rounds in the listed games. The player
+   * finds them on their next {@link Client.launchReal} of one of those games;
+   * what they win arrives once, on your `/freespins/finish` callback.
+   *
+   * Record the issue on your side before calling this — the result names only
+   * `issue_id`. A repeat with the same terms answers like the first call, so
+   * retry a timeout or a 5xx with the SAME request: a `valid_until` computed
+   * again is other terms, and other terms under one `issue_id` answer 610.
+   */
+  async issueFreespins(request: FreespinsIssueRequest): Promise<void> {
+    await this.postSigned<unknown>('/api/v1/softswiss/freespins/issue', {
+      casino_id: this.casinoId,
+      ...request,
+    })
+  }
+
+  /**
+   * Freespins/Cancel, at any time — even mid-play. A canceled issue never
+   * reaches `/freespins/finish`: what it won is forfeited. Canceling an issue
+   * that has already been played out is refused with api_code 620.
+   */
+  async cancelFreespins(request: FreespinsCancelRequest): Promise<void> {
+    await this.postSigned<unknown>('/api/v1/softswiss/freespins/cancel', {
+      casino_id: this.casinoId,
+      ...request,
+    })
+  }
+
+  /**
+   * Bet/Levels: the bet levels freespins can be issued at, per game and
+   * currency. `bet_level` in {@link Client.issueFreespins} is one of these.
+   */
+  async betLevels(request: BetLevelsRequest = {}): Promise<BetLevelData[]> {
+    const body = await this.postSigned<{ bet_levels?: BetLevelData[] }>(
+      '/api/v1/softswiss/bet/levels',
+      { casino_id: this.casinoId, ...request },
+    )
+    return body.bet_levels ?? []
   }
 
   private async postSigned<T>(path: string, payload: unknown): Promise<T> {

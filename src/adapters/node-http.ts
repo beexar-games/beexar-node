@@ -5,12 +5,13 @@ import { MAX_BODY_BYTES } from '../wallet.js'
 import { readRawBody, routeFromPath } from './raw-body.js'
 
 export interface NodeHttpWalletOptions {
-  /** Answer 404 for paths that are not one of the four callbacks. Default true. */
+  /** Answer 404 for paths that are not one of the callbacks. Default true. */
   handleUnknownRoutes?: boolean
 }
 
 /**
- * A plain `http.createServer` handler for the four callbacks.
+ * A plain `http.createServer` handler for the callbacks — the four round
+ * callbacks and `/freespins/finish`.
  *
  * This is the binding with the fewest moving parts, and the one every other
  * binding is built the same way as: read the bytes, hand them to the server,

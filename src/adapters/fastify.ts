@@ -6,12 +6,13 @@ import { ROUTES } from '../types.js'
 
 export interface FastifyWalletOptions {
   server: WalletServer
-  /** Path prefix the four routes are registered under. Default `''`. */
+  /** Path prefix the callback routes are registered under. Default `''`. */
   prefix?: string
 }
 
 /**
- * Fastify plugin registering the four callbacks.
+ * Fastify plugin registering the callbacks — the four round callbacks and
+ * `/freespins/finish`.
  *
  * ```js
  * await app.register(fastifyWallet, { server, prefix: '/wallet' })

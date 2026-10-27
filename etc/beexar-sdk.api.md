@@ -26,6 +26,15 @@ export const ApiCode: {
     readonly UNKNOWN_ERROR: "500";
     readonly SERVICE_UNAVAILABLE: "503";
     readonly REQUEST_TIMEOUT: "504";
+    readonly FREESPINS_NOT_AVAILABLE: "406";
+    readonly FREESPINS_IMPOSSIBLE: "601";
+    readonly FREESPINS_NO_GAME: "602";
+    readonly FREESPINS_BAD_EXPIRATION: "603";
+    readonly FREESPINS_STATE_TRANSITION: "605";
+    readonly FEATURE_NOT_SUPPORTED: "608";
+    readonly FREESPINS_INVALID_ISSUE: "610";
+    readonly FREESPINS_EXPIRED: "611";
+    readonly FREESPINS_CANT_CANCEL: "620";
 };
 
 // @public (undocumented)
@@ -62,6 +71,27 @@ export class BeexarApiError extends Error {
     readonly httpStatus: number;
     isRetryable(): boolean;
     isSignatureError(): boolean;
+}
+
+// @public
+export interface BetLevel {
+    amount: string;
+    // (undocumented)
+    bet_level: number;
+}
+
+// @public
+export interface BetLevelData {
+    // (undocumented)
+    currencies: CurrencyBetLevels[];
+    // (undocumented)
+    games: string[];
+}
+
+// @public
+export interface BetLevelsRequest {
+    currencies?: string[];
+    games?: string[];
 }
 
 // @public (undocumented)
@@ -113,6 +143,9 @@ export function captureRawBody(req: unknown, _res: unknown, buf: Buffer): void;
 // @public
 export class Client {
     constructor(options: ClientOptions);
+    betLevels(request?: BetLevelsRequest): Promise<BetLevelData[]>;
+    cancelFreespins(request: FreespinsCancelRequest): Promise<void>;
+    issueFreespins(request: FreespinsIssueRequest): Promise<void>;
     launchDemo(request: LaunchDemoRequest): Promise<LaunchResult>;
     launchReal(request: LaunchRealRequest): Promise<LaunchResult>;
     listGames(query?: ListGamesQuery): Promise<GameInfo[]>;
@@ -132,6 +165,13 @@ export const Currency: {
     pattern: string;
     isValid(code: unknown): code is string;
 };
+
+// @public (undocumented)
+export interface CurrencyBetLevels {
+    bet_levels: BetLevel[];
+    // (undocumented)
+    currency: string;
+}
 
 // @public (undocumented)
 export interface DispatchResponse {
@@ -171,6 +211,32 @@ export interface FinishRequest {
 export interface FinishResult {
     // (undocumented)
     balance: Money;
+}
+
+// @public
+export interface FreespinsCancelRequest {
+    issue_id: string;
+}
+
+// @public
+export interface FreespinsFinishRequest {
+    amount: Money;
+    issue_id: string;
+}
+
+// @public (undocumented)
+export interface FreespinsFinishResult {
+    balance: Money;
+}
+
+// @public
+export interface FreespinsIssueRequest {
+    account: LaunchAccount;
+    bet_level: number;
+    freespins_quantity: number;
+    games: string[];
+    issue_id: string;
+    valid_until: string;
 }
 
 // @public
@@ -424,7 +490,7 @@ export interface RollbackTransactionResult {
 }
 
 // @public
-export type Route = '/balance' | '/betwin' | '/rollback' | '/finish';
+export type Route = '/balance' | '/betwin' | '/rollback' | '/finish' | '/freespins/finish';
 
 // @public
 export function routeFromPath(path: string): Route | null;
@@ -472,12 +538,14 @@ export class WalletError extends Error {
     static countryRestricted(message?: string): WalletError;
     // (undocumented)
     static currencyNotAllowed(message?: string): WalletError;
+    static freespinsStateTransition(message?: string): WalletError;
     // (undocumented)
     static gameForbidden(message?: string): WalletError;
     // (undocumented)
     static insufficientFunds(balance: Money, message?: string): WalletError;
     // (undocumented)
     static internal(message?: string): WalletError;
+    static invalidFreespinsIssue(message?: string): WalletError;
     // (undocumented)
     static invalidPlayer(message?: string): WalletError;
     // (undocumented)
@@ -512,6 +580,7 @@ export interface WalletHandler {
     betWin(req: BetWinRequest, ctx: RequestContext): BetWinResult | Promise<BetWinResult>;
     // (undocumented)
     finish(req: FinishRequest, ctx: RequestContext): FinishResult | Promise<FinishResult>;
+    freespinsFinish?(req: FreespinsFinishRequest, ctx: RequestContext): FreespinsFinishResult | Promise<FreespinsFinishResult>;
     // (undocumented)
     rollback(req: RollbackRequest, ctx: RequestContext): RollbackResult | Promise<RollbackResult>;
 }

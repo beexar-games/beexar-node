@@ -31,7 +31,11 @@ const handler: WalletHandler = {
   }),
   rollback: () => ({ balance: Money.parse('100.00'), round_id: 'own-round', transactions: [] }),
   finish: () => ({ balance: Money.parse('100.00') }),
+  freespinsFinish: () => ({ balance: Money.parse('112.50') }),
 }
+
+const ROUND_FINISH = '{"account_id":"player_1","currency":"EUR","round_id":"r-1"}'
+const FREESPINS_FINISH = '{"issue_id":"fs-1","amount":"12.50"}'
 
 const newServer = (onWarning = () => {}) =>
   new WalletServer(handler, { apiSecret: SECRET, onWarning })
@@ -72,6 +76,32 @@ describe('node:http binding', () => {
     await withServer(createServer(nodeHttpWallet(newServer())), async (base) => {
       const res = await post(`${base}/api/v2/psp/betwin`, HOSTILE_BODY, sign(HOSTILE_BODY, SECRET))
       expect(res.status).toBe(200)
+    })
+  })
+
+  it('tells the freespins result from the round finish under one prefix', async () => {
+    // Both paths end in /finish. Each must reach its own handler, or a
+    // freespins result is parsed as a round finish and refused for want of
+    // an account_id.
+    await withServer(createServer(nodeHttpWallet(newServer())), async (base) => {
+      const freespins = await post(`${base}/wallet/freespins/finish`, FREESPINS_FINISH, sign(FREESPINS_FINISH, SECRET))
+      expect(freespins.status).toBe(200)
+      expect(((await freespins.json()) as { balance: string }).balance).toBe('112.50')
+
+      const round = await post(`${base}/wallet/finish`, ROUND_FINISH, sign(ROUND_FINISH, SECRET))
+      expect(round.status).toBe(200)
+      expect(((await round.json()) as { balance: string }).balance).toBe('100.00')
+    })
+  })
+
+  it('answers a non-ASCII signature with 400/403 over HTTP, not a 500', async () => {
+    // Node decodes header bytes >= 0x80 as Latin-1, so 64 such bytes reach the
+    // SDK as 64 characters that are not hex. The binding passes the header
+    // through untouched; the SDK must refuse it like any bad signature.
+    await withServer(createServer(nodeHttpWallet(newServer())), async (base) => {
+      const res = await post(`${base}/balance`, '{}', 'é'.repeat(64))
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { meta: { api_code: string } }).meta.api_code).toBe('403')
     })
   })
 
@@ -199,6 +229,22 @@ describe('fastify binding', () => {
       payload: '{"parsed":true}',
     })
     expect(JSON.parse(echo.payload)).toEqual({ parsed: true })
+
+    await app.close()
+  })
+
+  it('registers /freespins/finish beside the four round routes', async () => {
+    const app = Fastify()
+    await app.register(fastifyWallet, { server: newServer(), prefix: '/wallet' })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/wallet/freespins/finish',
+      headers: { 'content-type': 'application/json', 'X-REQUEST-SIGN': sign(FREESPINS_FINISH, SECRET) },
+      payload: FREESPINS_FINISH,
+    })
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.payload).balance).toBe('112.50')
 
     await app.close()
   })

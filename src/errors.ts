@@ -38,6 +38,23 @@ export const ApiCode = {
   UNKNOWN_ERROR: '500',
   SERVICE_UNAVAILABLE: '503',
   REQUEST_TIMEOUT: '504',
+
+  /**
+   * Freespins. Beexar answers your issueFreespins / cancelFreespins with 405,
+   * 406 and the 6xx codes; your /freespins/finish answers 610 for an issue you
+   * never issued and 605 for one you canceled.
+   */
+  /** This feature is not enabled for your casino. */
+  FREESPINS_NOT_AVAILABLE: '406',
+  FREESPINS_IMPOSSIBLE: '601',
+  FREESPINS_NO_GAME: '602',
+  FREESPINS_BAD_EXPIRATION: '603',
+  FREESPINS_STATE_TRANSITION: '605',
+  /** Feature is not supported for the requested game. */
+  FEATURE_NOT_SUPPORTED: '608',
+  FREESPINS_INVALID_ISSUE: '610',
+  FREESPINS_EXPIRED: '611',
+  FREESPINS_CANT_CANCEL: '620',
 } as const
 
 export type ApiCodeValue = (typeof ApiCode)[keyof typeof ApiCode] | (string & {})
@@ -179,6 +196,23 @@ export class WalletError extends Error {
     return WalletError.clientError(ApiCode.ALREADY_ROLLED_BACK, message)
   }
 
+  // --- freespins -------------------------------------------------------------
+
+  /** api_code 610: `/freespins/finish` names an `issue_id` you never issued. */
+  static invalidFreespinsIssue(message = 'invalid freespins issue'): WalletError {
+    return WalletError.clientError(ApiCode.FREESPINS_INVALID_ISSUE, message)
+  }
+
+  /**
+   * api_code 605: the issue cannot take this result in its current state — on
+   * `/freespins/finish`, an issue you canceled.
+   */
+  static freespinsStateTransition(
+    message = "can't change issue state from its current to requested",
+  ): WalletError {
+    return WalletError.clientError(ApiCode.FREESPINS_STATE_TRANSITION, message)
+  }
+
   // --- server --------------------------------------------------------------
 
   static internal(message = 'internal error'): WalletError {
@@ -232,7 +266,8 @@ export class WalletError extends Error {
 
 /**
  * An error answer from the Beexar gateway to one of YOUR calls
- * (launchReal / launchDemo / listGames).
+ * (launchReal / launchDemo / listGames / issueFreespins / cancelFreespins /
+ * betLevels).
  */
 export class BeexarApiError extends Error {
   readonly httpStatus: number

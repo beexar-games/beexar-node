@@ -23,6 +23,9 @@ const manifest = readJson('manifest.json') as {
 }
 const SECRET = read('secret.txt').toString('utf8')
 
+/** The shape the gateway sends: 64 lowercase hex characters. */
+const WELL_FORMED = /^[0-9a-f]{64}$/
+
 describe(`wallet conformance (fixture_version ${manifest.fixture_version})`, () => {
   it('covers every case in the manifest', () => {
     expect(manifest.cases.length).toBeGreaterThan(20)
@@ -40,9 +43,11 @@ describe(`wallet conformance (fixture_version ${manifest.fixture_version})`, () 
       const expected = readJson(`cases/${c.dir}/response.json`) as { status: number; body: unknown }
 
       // A fixture whose stored signature does not match its own bytes would
-      // quietly test nothing, so the suite re-derives it.
+      // quietly test nothing, so the suite re-derives it — but only a
+      // well-formed one: the all-zeros `wrong` sentinel and a deliberately
+      // malformed header (0033) are the case, not a drifted fixture.
       const stored = request.headers['X-REQUEST-SIGN']
-      if (stored !== undefined && stored !== '0'.repeat(64)) {
+      if (stored !== undefined && WELL_FORMED.test(stored) && stored !== '0'.repeat(64)) {
         expect(stored).toBe(sign(body, SECRET))
       }
 
@@ -72,5 +77,6 @@ function explode(wallet: InMemoryWallet): WalletHandler {
     betWin: (req) => wallet.betWin(req),
     rollback: (req) => wallet.rollback(req),
     finish: (req) => wallet.finish(req),
+    freespinsFinish: (req) => wallet.freespinsFinish(req),
   }
 }
