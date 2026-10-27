@@ -68,15 +68,20 @@ jobs:
       - name: Publish
         run: npm publish --provenance --access public
 
+      # npm lists a trusted publish with provenance after a delay that varies
+      # run to run: 54 s for 1.1.0, 157 s for 1.2.0 — the two-minute wait this
+      # step used to have ran out on 1.2.0 although the publish had passed.
+      # Ten minutes, and npm's own last answer when it still is not there.
       - name: Verify it is installable
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          for i in $(seq 1 12); do
+          for i in $(seq 1 60); do
             if npm view "@beexar/sdk@${VERSION}" version >/dev/null 2>&1; then
-              echo "@beexar/sdk@${VERSION} is live"
+              echo "@beexar/sdk@${VERSION} is live after ~$(( (i - 1) * 10 ))s"
               exit 0
             fi
             sleep 10
           done
-          echo "@beexar/sdk@${VERSION} did not appear on the registry" >&2
+          echo "@beexar/sdk@${VERSION} did not appear on the registry in 10 minutes; npm says:" >&2
+          npm view "@beexar/sdk@${VERSION}" version >&2 || true
           exit 1
